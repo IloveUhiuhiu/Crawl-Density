@@ -1,0 +1,13 @@
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.sqlite3
+
+# ---- Virtual Environment ----
+.venv/
+.env
+# ---- VSCode ----
+.vscode/
