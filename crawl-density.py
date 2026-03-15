@@ -83,27 +83,24 @@ def search_ingredient(driver, ingredient):
             
             time.sleep(0.5)
             search_box.send_keys(Keys.ENTER)
-
-            # 3. Đợi dữ liệu đổ về dropdown
-            # Gom việc tìm elements vào 1 lần duy nhất trong lambda để tránh Stale
-            def dropdown_ready(d):
-                try:
-                    opts = d.find_elements(By.CSS_SELECTOR, "#density option")
-                    return len(opts) > 1 and "specify" not in opts[1].text.lower()
-                except StaleElementReferenceException:
-                    return False
-
-            wait.until(dropdown_ready)
-            
-            dropdown = driver.find_element(By.ID, "density")
-            select = Select(dropdown)
-            
-            candidates = [opt.text.strip() for opt in select.options 
-                          if opt.text.strip() and "specify" not in opt.text.lower()]
-            
-            if candidates:
+            time.sleep(1)
+            driver.execute_script("document.getElementById('density').click();")
+            try:
+                # Đợi cho đến khi dropdown có ít nhất 2 option (bao gồm option mặc định)
+                wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "#density option")) > 1)
+                
+                # Thay vì dùng Select(dropdown).options, hãy lấy trực tiếp text/value qua thực thi JS 
+                # để tránh StaleElementReferenceException
+                options_data = driver.execute_script("""
+                    var sel = document.getElementById('density');
+                    return Array.from(sel.options).map(opt => opt.text);
+                """)
+                
+                candidates = [txt.strip() for txt in options_data if txt.strip() and "specify" not in txt.lower()]
                 return candidates
-
+            except Exception as e:
+                print(f"⚠️ Lỗi khi lấy candidates: {e}")
+                return []
         except (StaleElementReferenceException, TimeoutException):
             print(f"🔄 Đợi lâu quá hoặc trang refresh, đang thử lại...")
             # Nếu nghi ngờ kẹt, mới load lại trang làm phương án cuối
@@ -215,24 +212,31 @@ def gemini_select_best_candidate(ingredient, candidates):
 
     # Tạo prompt để ép Gemini trả về kết quả chính xác
     prompt = f"""
-    I have an original ingredient name: "{ingredient}"
-    From the following list of search results, pick the one that best represents the generic or most common version of this ingredient.
+    Original Ingredient: "{ingredient}"
     
-    Rules:
-    1. Respond ONLY with the exact text of the chosen item.
-    2. Do not include any explanations or extra characters.
-    3. If none are a good match, pick the most generic one.
-
-    List:
+    Candidates from search results:
     {chr(10).join([f"- {c}" for c in candidates])}
-    
-    Best match:"""
 
+    Task:
+    1. Select the BEST match from the candidate list that represents the original ingredient.
+    2. Logic for Selection:
+       - For MEAT, VEGETABLES, and GRAINS: Prefer "cooked", "roasted", "boiled", or "baked" versions over "raw".
+       - For FRUITS: Prefer "raw", "fresh", or "whole" versions.
+       - Generic over Specific: Choose the most standard version. Avoid "baby food" or "brands" unless it's the only option.
+    3. Constraint 1: Your response must be EXACTLY one of the strings from the candidate list provided.
+    4. Constraint 2: If no candidate is a reasonable match for the ingredient, respond with "NONE".
+    5. Constraint 3: Provide ONLY the string of the selected item. Do not include explanations, notes, or punctuation.
+
+    Best Match:"""
     try:
         response = client.models.generate_content( model=MODEL_ID, contents=prompt ) 
         best_match = response.text.strip() 
         print("🤖 AI trả:", best_match)
         
+        if "NONE" in best_match.upper():
+            print(f"⏩ Skipping: No good match found for '{ingredient}'")
+            return None
+
         # Kiểm tra xem Gemini có trả về đúng text trong list không (tránh hallucination)
         if best_match in candidates:
             print(f"🤖 Gemini chose: {best_match}")
