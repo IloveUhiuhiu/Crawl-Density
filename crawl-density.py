@@ -218,14 +218,17 @@ def gemini_select_best_candidate(ingredient, candidates):
     {chr(10).join([f"- {c}" for c in candidates])}
 
     Task:
-    1. Select the BEST match from the candidate list that represents the original ingredient.
-    2. Logic for Selection:
-       - For MEAT, VEGETABLES, and GRAINS: Prefer "cooked", "roasted", "boiled", or "baked" versions over "raw".
-       - For FRUITS: Prefer "raw", "fresh", or "whole" versions.
-       - Generic over Specific: Choose the most standard version. Avoid "baby food" or "brands" unless it's the only option.
-    3. Constraint 1: Your response must be EXACTLY one of the strings from the candidate list provided.
-    4. Constraint 2: If no candidate is a reasonable match for the ingredient, respond with "NONE".
-    5. Constraint 3: Provide ONLY the string of the selected item. Do not include explanations, notes, or punctuation.
+    1. Select the BEST match from the candidate list.
+    2. Selection Logic (Strict Priority):
+       - If it's a FRUIT: Select the "raw", "fresh", or "whole" version.
+       - If it's MEAT, VEGETABLE, or GRAIN: Select the "cooked", "roasted", "boiled", or "baked" version.
+       - If none of the above specific states exist, select the most "generic/standard" version of the food.
+    3. Mandatory Filters: 
+       - NEVER select "babyfood", "strained", "juice", "liquid", or "dehydrated" versions.
+       - Avoid specific commercial brands.
+    4. Constraint 1: Your response must be EXACTLY the string from the candidate list.
+    5. Constraint 2: If no candidate matches the ingredient at all, respond with "NONE".
+    6. Constraint 3: Provide ONLY the string. No conversational text.
 
     Best Match:"""
     try:
@@ -259,6 +262,7 @@ def get_processed_ingredients():
             df = pd.read_csv(OUTPUT_CSV)
             # Lấy toàn bộ ingredient đã xử lý (bất kể có density hay không)
             processed = set(df['ingredient'].tolist())
+            precessed.extend(['cheese pizza', 'guacamole', 'artic char'])
             print(f"📋 Đã tìm thấy {len(processed)} ingredient trong file output")
             return processed
         except Exception as e:
